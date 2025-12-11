@@ -1,9 +1,9 @@
 import zipfile
 import xml.etree.ElementTree as ET
 from openpyxl import load_workbook
-from docx import Document
 from lxml import etree
 from tkinter import Tk, filedialog
+import json
 
 # WordprocessingML namespace
 NS = {
@@ -18,9 +18,18 @@ class SysReq:
         self.req_cover = []
 
     def print(self):
+        print(60*'-')
         print(f"System Requirement {self.req_id} - {self.req_desc}")
         for req in self.req_cover:
             req.print()
+        print(60*'-')
+
+    def to_dict(self):
+        return {
+            "Requirement ID": self.req_id,
+            "Description": self.req_desc,
+            "Covered by": [c.to_dict() for c in self.req_cover]
+        }
 
 class Requirement:
     def __init__(self, module=None, iden=None, status=None, cat=None, safety=None,
@@ -117,6 +126,21 @@ class Requirement:
         print(f"\t\tFunctional Blocks:")
         for f in self.func_blocks:
             print(f"\t\t\t- {f}")
+
+    def to_dict(self):
+        return {
+            "Identifier": self.iden,
+            "Module": self.module,
+            "Status": self.status,
+            "Category": self.cat,
+            "Safety Level": self.safety,
+            "Verification Method": self.ver_met,
+            "Validation Method": self.val_met,
+            "Operational Mode": self.op,
+            "Description": self.desc,
+            "Covers": self.cover,
+            "Covering Blocks": self.func_blocks
+        }
 
 def get_file(type):
     # Create a hidden root window
@@ -277,15 +301,12 @@ def extract_tables_from_docm_xml(docm_path, target_headings=None, partial=False)
 
     # --- 2) Parse XML ---
     root = etree.fromstring(xml_content)
-    ns = {
-        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-    }
 
     results = []
     current_header = None
 
     # --- 3) Iterate through child elements in order ---
-    for child in root.xpath(".//w:body/*", namespaces=ns):
+    for child in root.xpath(".//w:body/*", namespaces=NS):
 
         # ---------------------------
         # A) Detect heading paragraphs
@@ -293,11 +314,11 @@ def extract_tables_from_docm_xml(docm_path, target_headings=None, partial=False)
         if child.tag == "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p":
 
             # Paragraph text (concatenate all runs)
-            texts = child.xpath(".//w:t/text()", namespaces=ns)
+            texts = child.xpath(".//w:t/text()", namespaces=NS)
             para_text = "".join(texts).strip()
 
             # Style (Heading 1, Heading 2, etc.)
-            pstyle = child.xpath(".//w:pStyle/@w:val", namespaces=ns)
+            pstyle = child.xpath(".//w:pStyle/@w:val", namespaces=NS)
             style_name = pstyle[0] if pstyle else ""
 
             if style_name.startswith("Titolo") and para_text:
@@ -309,10 +330,10 @@ def extract_tables_from_docm_xml(docm_path, target_headings=None, partial=False)
         elif child.tag == "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tbl" and current_header:
 
             table_data = []
-            for row in child.xpath(".//w:tr", namespaces=ns):
+            for row in child.xpath(".//w:tr", namespaces=NS):
                 cells = []
-                for cell in row.xpath("./w:tc", namespaces=ns):
-                    cell_text = "".join(cell.xpath(".//w:t/text()", namespaces=ns)).strip("[]")
+                for cell in row.xpath("./w:tc", namespaces=NS):
+                    cell_text = "".join(cell.xpath(".//w:t/text()", namespaces=NS)).strip("[]")
                     cells.append(cell_text.strip("[]"))
                 table_data.append(cells)
 
@@ -372,3 +393,7 @@ if __name__ == '__main__':
     check_coverage(reqs=reqs, tables=tables)
     for sr in sys_reqs:
         sr.print()
+
+    json_data = [sr.to_dict() for sr in sys_reqs]
+    with open("SistemRequirements.json", "w") as f:
+        json.dump(json_data, f, indent=4)
