@@ -349,7 +349,7 @@ def check_coverage(reqs=None, tables=None):
         for r in reqs:
             for sr in sys_reqs:
                 if sr.req_id == r.cover:
-                    sr.req_cover.append(r.iden)
+                    sr.req_cover.append(r)
 
 if __name__ == '__main__':
     # Select files to open
