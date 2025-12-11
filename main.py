@@ -2,12 +2,8 @@ import zipfile
 import xml.etree.ElementTree as ET
 from openpyxl import load_workbook
 from docx import Document
-from docx.oxml.table import CT_Tbl
-from docx.oxml.text.paragraph import CT_P
-from docx.table import Table
-from docx.text.paragraph import Paragraph
 from lxml import etree
-
+from tkinter import Tk, filedialog
 
 # WordprocessingML namespace
 NS = {
@@ -21,8 +17,11 @@ class SysReq:
         self.req_desc = req_desc
         self.req_cover = []
 
-    def __repr__(self):
-        return f"Requirement(id={self.req_id!r}, desc={self.req_desc}, data={self.req_cover})\n"
+    def print(self):
+        print(f"System Requirement {self.req_id} - {self.req_desc}")
+        for req in self.req_cover:
+            req.print()
+
 class Requirement:
     def __init__(self, module=None, iden=None, status=None, cat=None, safety=None,
                  ver_met=None, val_met=None, op=None, desc=None, cover=None):
@@ -36,6 +35,7 @@ class Requirement:
         self.op = op
         self.desc = desc
         self.cover = cover
+        self.func_blocks = []
 
     def set_module(self, value):
         self.module = value
@@ -103,25 +103,87 @@ class Requirement:
         return self.cover
 
     def print(self):
-        print("Requirement details:")
-        print(f"\tModule: {self.module}" or f"\tModule: No module set")
         print(f"\tIdentifier: {self.iden}" or f"\tidentifier: No identifier set")
-        print(f"\tStatus: {self.status}" or f"\tStatus: No status set")
-        print(f"\tCategory: {self.cat}" or f"\tCategory: No category set")
-        print(f"\tSafety Level (DAL): {self.safety}" or f"\tSafety Level (DAL): No safety level set")
-        print(f"\tVerification Method: {self.ver_met}" or f"\tVerification Method: No method set")
-        print(f"\tValidation Method: {self.val_met}" or f"\tValidation Method: No method set")
-        print(f"\tOperational Mode: {self.op}" or f"\tOperational Mode: No mode set")
-        print(f"\tDescription: {self.desc}" or f"\tDescription: No description set")
-        print(f"\tCoverage: {self.cover}" or f"\tCoverage: No coverage set")
+        print(f"\t\tModule: {self.module}" or f"\tModule: No module set")
+        print(f"\t\tIdentifier: {self.iden}" or f"\tidentifier: No identifier set")
+        print(f"\t\tStatus: {self.status}" or f"\tStatus: No status set")
+        print(f"\t\tCategory: {self.cat}" or f"\tCategory: No category set")
+        print(f"\t\tSafety Level (DAL): {self.safety}" or f"\tSafety Level (DAL): No safety level set")
+        print(f"\t\tVerification Method: {self.ver_met}" or f"\tVerification Method: No method set")
+        print(f"\t\tValidation Method: {self.val_met}" or f"\tValidation Method: No method set")
+        print(f"\t\tOperational Mode: {self.op}" or f"\tOperational Mode: No mode set")
+        print(f"\t\tDescription: {self.desc}" or f"\tDescription: No description set")
+        print(f"\t\tCoverage: {self.cover}" or f"\tCoverage: No coverage set")
+        print(f"\t\tFunctional Blocks:")
+        for f in self.func_blocks:
+            print(f"\t\t\t- {f}")
 
-def load_reqs_from_excel(filename, sheetname):
+def get_file(type):
+    # Create a hidden root window
+    root = Tk()
+    root.withdraw()
+
+    match type:
+        case "System Requirements":
+            title = "Select the file with System Requirements"
+            filetypes = [
+                ("Excel files", ".xlsx"),
+                ("All files", ".*")
+            ]
+        case "FFRS":
+            title = "Select the FFRS file"
+            filetypes = [
+                ("Word files", ".docx"),
+                ("Word files with macro", ".docm"),
+                ("All files", ".*")
+            ]
+        case "FAD":
+            title = "Select the FAD file"
+            filetypes = [
+                ("Word files", ".docx"),
+                ("Word files with macro", ".docm"),
+                ("All files", ".*")
+            ]
+        case _:
+            print("Selected type not recognized - Exit program")
+            exit(1)
+
+    # Open file dialog
+    return filedialog.askopenfilename(title=title, filetypes=filetypes)
+
+def load_reqs_from_sheet(filename):
+    wb = load_workbook(filename)
+    sheets = wb.sheetnames
+
+    print("Available sheets:")
+    for i, name in enumerate(sheets, start=1):
+        print(f"{i}. {name}")
+
+    while True:
+        try:
+            choice = int(input("\nEnter the number of the sheet you want to select: "))
+            # choice = 4
+            if 1 <= choice <= len(sheets):
+                selected_sheet = sheets[choice - 1]
+                break
+            else:
+                print("Please enter a valid number.")
+        except ValueError:
+            print("Please enter a number")
+
+    return wb[selected_sheet]
+
+def load_reqs_from_excel(filename, min_row=4, req_id_col=0, req_desc_col=1):
     reqs = []
-    sys_req_spec_file = load_workbook(filename)
-    sys_req_spec_sheet = sys_req_spec_file[sheetname]
-    for row in sys_req_spec_sheet.iter_rows(min_row=4, values_only=True):           # Skip header and empty rows
-        req_id = row[0]         # Value in column A
-        req_desc = row[1]       # Value in column B
+
+    sheet = load_reqs_from_sheet(filename)
+
+    # sys_req_spec_file = load_workbook(filename)
+    # sys_req_spec_sheet = sys_req_spec_file[sheetname]
+
+    for row in sheet.iter_rows(min_row=min_row, values_only=True):           # Skip header and empty rows
+        req_id = row[req_id_col]         # Value in column A
+        req_desc = row[req_desc_col]       # Value in column B
 
         if not req_id:
             continue
@@ -133,67 +195,9 @@ def load_reqs_from_excel(filename, sheetname):
         reqs.append(req)
 
     return reqs
-def get_unique_xml_tags_from_docx(docm_path):
-    unique_tags = set()
 
-    with zipfile.ZipFile(docm_path, "r") as z:
-        try:
-            with z.open("word/document.xml") as f:
-                tree = ET.parse(f)
-                root = tree.getroot()
-
-                for elem in root.iter():
-                    if '}' in elem.tag:
-                        tag = elem.tag.split('}', 1)[1]
-                    else:
-                        tag = elem.tag
-                unique_tags.add(tag)
-
-        except ET.ParseError:
-            pass
-
-    return unique_tags
-def print_tree(elem, indent=""):
-    if '}' in elem.tag:
-        tag = elem.tag.split('}', 1)[1]
-    else:
-        tag = elem.tag
-    print(indent + "└── " + tag)
-
-    for child in list(elem):
-        print_tree(child, indent + "    ")
-def visualize_docm_xml_tree(docm_path):
-    with zipfile.ZipFile(docm_path, 'r') as z:
-        try:
-            with z.open("word/document.xml") as f:
-                tree = ET.parse(f)
-                root = tree.getroot()
-                print_tree(root)
-        except ET.ParseError:
-            print(f"XML Parse Error")
-        except Exception as e:
-            print(f"Error Reading File: {e}")
-def extract_text_by_paragraph_style(docm_file, target_style):
-    doc = Document(docm_file)
-    results = []
-
-    for p in doc.paragraphs:
-        if p.style and p.style.name == target_style:
-            if p.text.strip():
-                results.append(p.text.strip())
-
-    return results
-def list_styles_in_docm(docm_path):
-    with zipfile.ZipFile(docm_path, "r") as z:
-        styles_xml = z.read("word/styles.xml")
-    root = ET.fromstring(styles_xml)
-
-    print("Available style IDs:")
-    for s in root.findall(".//w:style", NS):
-        sid = s.get("{%s}styleId" % NS["w"])
-        print("-", sid)
 def extract_text_from_docm_by_style(docm_path, target_styles):
-    results = []
+    results = []                      # Only for debug purposes
     requirements = []
     currentReq = None
 
@@ -211,8 +215,10 @@ def extract_text_from_docm_by_style(docm_path, target_styles):
             # If paragraph style matches, extract all its text
             if paragraph_style in target_styles:
                 text = "".join(t.text for t in p.findall(".//w:t", NS) if t.text)
-                if text.strip():
-                    results.append((paragraph_style, text))
+
+                # To be use only for debug purposes
+                # if text.strip():
+                #    results.append((paragraph_style, text))
 
                 match paragraph_style:
                     case 'ReqTag':
@@ -239,18 +245,7 @@ def extract_text_from_docm_by_style(docm_path, target_styles):
                         requirements.append(currentReq)
 
     return results, requirements
-def check_coverage(reqs=None):
-    if reqs and sys_reqs:
-        for r in reqs:
-            for sr in sys_reqs:
-                if sr.req_id == r.cover:
-                    sr.req_cover.append(r.iden)
-# def iter_block_items(parent):
-#    for child in parent.element.body.iterchildren():
-#        if isinstance(child, CT_P):
-#            yield Paragraph(child, parent)
-#        elif isinstance(child, CT_Tbl):
-#            yield Table(child, parent)
+
 def extract_tables_from_docm_xml(docm_path, target_headings=None, partial=False):
     """
     Extract tables directly from the XML of a .docm file and associate
@@ -318,7 +313,7 @@ def extract_tables_from_docm_xml(docm_path, target_headings=None, partial=False)
                 cells = []
                 for cell in row.xpath("./w:tc", namespaces=ns):
                     cell_text = "".join(cell.xpath(".//w:t/text()", namespaces=ns)).strip("[]")
-                    cells.append(cell_text)
+                    cells.append(cell_text.strip("[]"))
                 table_data.append(cells)
 
             if not table_data:
@@ -343,46 +338,37 @@ def extract_tables_from_docm_xml(docm_path, target_headings=None, partial=False)
 
     return results
 
+def check_coverage(reqs=None, tables=None):
+    if tables and reqs:
+        for t in tables:
+            for r in reqs:
+                if [r.iden] in t['table']:
+                    r.func_blocks.append(t['header'])
+
+    if reqs and sys_reqs:
+        for r in reqs:
+            for sr in sys_reqs:
+                if sr.req_id == r.cover:
+                    sr.req_cover.append(r.iden)
+
 if __name__ == '__main__':
+    # Select files to open
+    SysReq_filename = get_file("System Requirements")
+    FFRS_filename = get_file("FFRS")
+    FAD_filename = get_file("FAD")
+
     # Parsing Excel file to extract data
-    sys_reqs = load_reqs_from_excel("System_requirements_specification__v6.xlsx", "Req.ID LED - LINKS")
-    # print(reqs)
-
-    docm_file = "FFRS_v5.docm"
-    # visualize_docm_xml_tree(docm_file)
-
-    # list_styles_in_docm(docm_file)
+    sys_reqs = load_reqs_from_excel(SysReq_filename)
 
     styles_to_extract = {
         "ReqTag",
         "ReqText",
         "ReqCover"
-    }                               # <-- use the internal style ID, not display name
-                                    # Example: "Heading1", "Normal", "Quote"
+    }                               # List of styles to extract from the FFRS file
+    texts, reqs = extract_text_from_docm_by_style(FFRS_filename, styles_to_extract)
 
-    texts, reqs = extract_text_from_docm_by_style(docm_file, styles_to_extract)
+    tables = extract_tables_from_docm_xml(FAD_filename, target_headings="Requirement Covered")
 
-    # print(f"Text using style '{styles_to_extract}':")
-    # for t in texts:
-    #     print("-", t)
-
-    for r in reqs:
-        r.print()
-
-    check_coverage(reqs=reqs)
-    print(sys_reqs)
-
-    FAD_file = "FAD_v4_comments.docm"
-    # visualize_docm_xml_tree(FAD_file)
-    # list_styles_in_docm(FAD_file)
-
-    tables = extract_tables_from_docm_xml(FAD_file, target_headings="Requirement Covered")
-    print(tables)
-
-#    tags = get_unique_xml_tags_from_docx(docm_file)
-#    print ("Unique XML tags found in the .docm file:")
-#    for t in sorted(tags):
-#        print(t)
-
-
-
+    check_coverage(reqs=reqs, tables=tables)
+    for sr in sys_reqs:
+        sr.print()
