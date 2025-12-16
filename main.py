@@ -4,6 +4,7 @@ from openpyxl import load_workbook
 from lxml import etree
 from tkinter import Tk, filedialog
 import json
+from rich import print_json
 
 # WordprocessingML namespace
 NS = {
@@ -157,15 +158,13 @@ def get_file(type):
         case "FFRS":
             title = "Select the FFRS file"
             filetypes = [
-                ("Word files", ".docx"),
-                ("Word files with macro", ".docm"),
+                ("Word files", ".docx, .docm"),
                 ("All files", ".*")
             ]
         case "FAD":
             title = "Select the FAD file"
             filetypes = [
-                ("Word files", ".docx"),
-                ("Word files with macro", ".docm"),
+                ("Word files", ".docx, .docm"),
                 ("All files", ".*")
             ]
         case _:
@@ -247,16 +246,20 @@ def extract_text_from_docm_by_style(docm_path, target_styles):
                 match paragraph_style:
                     case 'ReqTag':
                         tag = [p.strip() for p in text.split("\uf0b7")]
-                        currentReq = Requirement(
-                            module=tag[0].strip("[]").split("-")[1].strip(" "),
-                            iden=tag[0].strip("[]"),
-                            status=tag[1],
-                            cat=tag[2],
-                            safety=tag[3],
-                            ver_met=tag[4],
-                            val_met=tag[5],
-                            op=tag[6]
-                        )
+                        try:
+                            currentReq = Requirement(
+                                module=tag[0].strip("[]").split("-")[1].strip(" "),
+                                iden=tag[0].strip("[]"),
+                                status=tag[1],
+                                cat=tag[2],
+                                safety=tag[3],
+                                ver_met=tag[4],
+                                val_met=tag[5],
+                                op=tag[6]
+                            )
+                        except IndexError as e:
+                            print(f"Index Out of Range when analysing tag {tag}")
+                            exit(1)
                     case 'ReqText':
                         if currentReq:
                             if currentReq.get_desc():
@@ -266,7 +269,7 @@ def extract_text_from_docm_by_style(docm_path, target_styles):
                     case 'ReqCover':
                         if currentReq:
                             currentReq.set_cover(text.strip("[]").split(" ")[1])
-                        requirements.append(currentReq)
+                            requirements.append(currentReq)
 
     return results, requirements
 
@@ -381,6 +384,7 @@ if __name__ == '__main__':
     # Parsing Excel file to extract data
     sys_reqs = load_reqs_from_excel(SysReq_filename)
 
+    print(f"Extracting data from {FFRS_filename}")
     styles_to_extract = {
         "ReqTag",
         "ReqText",
@@ -388,6 +392,7 @@ if __name__ == '__main__':
     }                               # List of styles to extract from the FFRS file
     texts, reqs = extract_text_from_docm_by_style(FFRS_filename, styles_to_extract)
 
+    print(f"Extracting data from {FAD_filename}")
     tables = extract_tables_from_docm_xml(FAD_filename, target_headings="Requirement Covered")
 
     check_coverage(reqs=reqs, tables=tables)
@@ -397,3 +402,5 @@ if __name__ == '__main__':
     json_data = [sr.to_dict() for sr in sys_reqs]
     with open("SistemRequirements.json", "w") as f:
         json.dump(json_data, f, indent=4)
+
+    print_json(data=json_data)
