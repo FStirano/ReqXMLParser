@@ -5,6 +5,7 @@ from lxml import etree
 from tkinter import Tk, filedialog
 import json
 from rich import print_json
+from view import json_view
 
 # WordprocessingML namespace
 NS = {
@@ -31,7 +32,6 @@ class SysReq:
             "Description": self.req_desc,
             "Covered by": [c.to_dict() for c in self.req_cover]
         }
-
 class Requirement:
     def __init__(self, module=None, iden=None, status=None, cat=None, safety=None,
                  ver_met=None, val_met=None, op=None, desc=None, cover=None):
@@ -324,7 +324,7 @@ def extract_tables_from_docm_xml(docm_path, target_headings=None, partial=False)
             pstyle = child.xpath(".//w:pStyle/@w:val", namespaces=NS)
             style_name = pstyle[0] if pstyle else ""
 
-            if style_name.startswith("Titolo") and para_text:
+            if style_name.startswith(("Titolo", "Heading")) and para_text:
                 current_header = para_text
 
         # ---------------------------
@@ -380,6 +380,9 @@ if __name__ == '__main__':
     SysReq_filename = get_file("System Requirements")
     FFRS_filename = get_file("FFRS")
     FAD_filename = get_file("FAD")
+    # SysReq_filename = "System_requirements_specification__v6.xlsx"
+    # FFRS_filename = "FFRS_v7.docm"
+    # FAD_filename = "FAD_v6.docm"
 
     # Parsing Excel file to extract data
     sys_reqs = load_reqs_from_excel(SysReq_filename)
@@ -404,3 +407,5 @@ if __name__ == '__main__':
         json.dump(json_data, f, indent=4)
 
     print_json(data=json_data)
+    # fig = json_view(data=json_data, title="System Requirements Tree")
+    # fig.show()
